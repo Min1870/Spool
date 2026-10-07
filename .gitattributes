@@ -1,0 +1,6 @@
+# Keep LF line endings in the repo. Files mounted into Linux containers
+# (garage.toml, scripts, Dockerfiles) break with Windows CRLF endings.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.mp4 binary

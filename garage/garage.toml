@@ -1,0 +1,41 @@
+# Garage config for LOCAL DEVELOPMENT (single node, no replication).
+# Garage is a small open-source S3-compatible storage server. It stands in for
+# Cloudflare R2 on your machine: the app talks to both with the same S3 API.
+#
+# Secrets are NOT in this file. docker-compose passes them as env vars:
+#   GARAGE_RPC_SECRET, GARAGE_ADMIN_TOKEN  (Garage reads these automatically)
+
+# Where Garage keeps its database and the actual file bytes. Both paths are
+# Docker volumes (see docker-compose.yml), so data survives `docker compose down`.
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "lmdb"
+
+# One copy of each file. Fine for dev; real clusters use 3.
+replication_factor = 1
+
+# Internal port Garage nodes use to talk to each other. We only have one node.
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr = "127.0.0.1:3901"
+
+[s3_api]
+# The S3 API: what @aws-sdk/client-s3 and presigned upload URLs talk to.
+# The region must match S3_REGION in .env, or request signatures won't match.
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
+root_domain = ".s3.garage.localhost"
+
+[s3_web]
+# The "website" endpoint serves files from public buckets over plain HTTP, with no
+# signature needed. The bucket is picked from the hostname:
+#   http://<bucket>.web.garage.localhost:3902/<key>
+# Browsers resolve any *.localhost name to your own machine, so this works without
+# editing your hosts file. We use it to serve HLS video and thumbnails to hls.js.
+bind_addr = "[::]:3902"
+root_domain = ".web.garage.localhost"
+index = "index.html"
+
+[admin]
+# Admin HTTP API. storage-init uses it to create buckets and set CORS.
+# It is only reachable inside the Docker network (not published to your machine).
+api_bind_addr = "[::]:3903"

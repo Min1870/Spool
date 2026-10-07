@@ -1,0 +1,91 @@
+# Local infrastructure for Spool.
+#
+#   docker compose up -d      start everything in the background
+#   docker compose ps         see what's running and whether it's healthy
+#   docker compose logs -f    follow the logs
+#   docker compose down       stop (data is kept in named volumes)
+#   docker compose down -v    stop AND delete all stored videos and queue data
+#
+# Docker Compose automatically reads the `.env` file next to this one, so
+# ${S3_BUCKET} etc. below come from there. Copy .env.example to .env first.
+#
+# Ports are bound to 127.0.0.1 so they're only reachable from your own machine,
+# not from other devices on your Wi-Fi.
+
+# Project name: containers and volumes are called spool-garage-1, spool_redis-data, ...
+# (otherwise Compose would name them after the folder).
+name: spool
+
+services:
+  # ── Object storage (S3-compatible) ─────────────────────────────────────────
+  # Garage plays the role Cloudflare R2 plays in production. The app only talks
+  # S3 to it, so switching to R2 later is just a change of env vars.
+  garage:
+    image: dxflrs/garage:v2.4.1
+    # --single-node:        set up a one-machine cluster automatically
+    # --default-access-key: create the app's access key from the env vars below
+    command: ["/garage", "server", "--single-node", "--default-access-key"]
+    environment:
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET}
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN}
+      GARAGE_DEFAULT_ACCESS_KEY: ${S3_ACCESS_KEY}
+      GARAGE_DEFAULT_SECRET_KEY: ${S3_SECRET_KEY}
+    volumes:
+      - ./garage/garage.toml:/etc/garage.toml:ro
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+    ports:
+      - "127.0.0.1:3900:3900" # S3 API: presigned uploads, the SDK
+      - "127.0.0.1:3902:3902" # website endpoint: public HLS playback + thumbnails
+    healthcheck:
+      # The Garage image has no shell or curl, only the garage binary itself.
+      test: ["CMD", "/garage", "status"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  # Runs once after Garage is healthy: creates the buckets, access and CORS rules,
+  # then exits. Safe to re-run: `docker compose run --rm storage-init`
+  storage-init:
+    image: node:22-alpine
+    depends_on:
+      garage:
+        condition: service_healthy
+    command: ["node", "/init.mjs"]
+    volumes:
+      - ./garage/init.mjs:/init.mjs:ro
+    environment:
+      GARAGE_ADMIN_URL: http://garage:3903 # "garage" = the service name above, on Docker's network
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_PUBLIC_BUCKET: ${S3_PUBLIC_BUCKET}
+      APP_ORIGIN: ${APP_ORIGIN}
+    restart: "no"
+
+  # ── Job queue ──────────────────────────────────────────────────────────────
+  # Redis is an in-memory data store. BullMQ uses it to hold the "transcode this
+  # video" jobs between the web app (producer) and the worker (consumer).
+  redis:
+    image: redis:8-alpine
+    # appendonly: write every change to disk, so queued jobs survive a restart.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # The FFmpeg worker is added in phase 4.
+
+volumes:
+  garage-meta:
+  garage-data:
+  redis-data:
