@@ -3,8 +3,8 @@
 A small YouTube-style video app: upload a video in the browser, a background worker
 converts it to adaptive HLS (480p + 720p) with FFmpeg, and viewers watch it with hls.js.
 
-> 🚧 Built in phases. **Done: phase 1 (local infrastructure).** The rest of this README
-> grows with each phase.
+> 🚧 Built in phases. **Done: phase 1 (local infrastructure), phase 2 (database).** The
+> rest of this README grows with each phase.
 
 ## How it fits together
 
@@ -147,6 +147,66 @@ docker compose down -v               # stop and DELETE all stored files + queue 
   for Garage. Git Bash ships curl 7.85; use Windows' built-in `curl.exe` (8.x) from PowerShell.
 - **`*.localhost` doesn't resolve** (very old curl/browser): use Chrome/Edge/Firefox, or add
   `127.0.0.1 spool-media.web.garage.localhost` to `C:\Windows\System32\drivers\etc\hosts`.
+
+## Phase 2: database (Supabase)
+
+Supabase gives us a hosted **Postgres** database (plus auth, used in phase 6). We store one
+row per video in a `videos` table. The video files live in storage; the database only
+holds small facts about them: title, status, storage keys, duration, error.
+
+**New concepts, briefly:**
+- **Migration.** A SQL file that changes the database's structure. Migrations are numbered
+  (`0001_...`) and kept in git, so anyone can rebuild the same database from scratch.
+- **Check constraint.** A rule inside the database, e.g. status must be one of five values.
+  Even buggy code can't save a bad value.
+- **Row Level Security (RLS).** Postgres rules that decide which rows each key may see.
+  We turn it on with no rules yet, so the browser-safe key can't read or write anything.
+  Only our server code (secret key, which bypasses RLS) touches the table.
+- **Two keys.** The *publishable* key (`sb_publishable_...`) is safe in the browser and limited
+  by RLS. The *secret* key (`sb_secret_...`) can do anything and must stay on the server.
+
+### Set it up
+
+1. Create a free project at https://supabase.com/dashboard (any name, e.g. `spool`; pick a
+   region near you; save the database password somewhere safe).
+2. **Run the migration:** in the dashboard open **SQL Editor** → **New query**, paste the whole
+   of [supabase/migrations/0001_videos.sql](supabase/migrations/0001_videos.sql), and click **Run**.
+   You should see "Success. No rows returned".
+3. **Copy your keys into `.env`:**
+   - `NEXT_PUBLIC_SUPABASE_URL`: the Project URL, e.g. `https://abcd1234.supabase.co`
+     (the **Connect** button at the top, or **Settings → Data API**)
+   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`: **Settings → API Keys** → Publishable key
+   - `SUPABASE_SECRET_KEY`: **Settings → API Keys** → Secret keys (create one if there's none)
+
+### Test it
+
+**1. See the table:** in the dashboard, **Table Editor** → `videos`. It's empty, with the
+columns `id, user_id, title, status, original_key, hls_key, thumbnail_key, duration, error, created_at`.
+
+**2. Try it by hand** in the SQL Editor:
+```sql
+insert into videos (title) values ('my first video') returning *;
+-- status is 'uploading', id and created_at are filled in automatically
+
+insert into videos (title, status) values ('bad', 'banana');
+-- ERROR: violates check constraint "videos_status_check"  ← the database protects itself
+
+delete from videos where title = 'my first video';
+```
+
+**3. Run the check script** from the repo root (PowerShell):
+```powershell
+node --env-file=.env scripts/check-db.mjs
+```
+Expected: every line starts with ✓ and it ends with `All checks passed.` It inserts, reads,
+rejects a bad status and deletes a test row with the secret key, then confirms the publishable
+key is blocked by RLS.
+
+### Troubleshooting
+- **`Insert failed (HTTP 404)` / relation does not exist**: the migration didn't run. Repeat step 2.
+- **HTTP 401 with the secret key**: the key is wrong or has a stray space. Copy it again.
+  Secret keys only work from servers and scripts, never in a browser.
+- **"Fill in ... in .env first"**: you're still on the placeholder values in `.env`.
 
 ## Environment variables
 
