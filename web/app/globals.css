@@ -1,0 +1,106 @@
+/* Spool "Modernist" tokens, ported from docs/design/modernist.css.
+   This is the only file that may contain raw colour values. */
+@import "tailwindcss";
+
+/* `static` makes Tailwind emit every token, even ones no utility class uses yet,
+   so var(--color-...) always works. */
+@theme static {
+  --color-*: initial;
+  --color-white: #fff;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+
+  --color-bg: #f3f2f2;
+  --color-surface: #eae9e9;
+  --color-text: #201e1d;
+  --color-accent: #ec3013;
+  --color-divider: color-mix(in srgb, #201e1d 40%, transparent);
+
+  --color-neutral-100: #f8f4f4;
+  --color-neutral-200: #eae7e7;
+  --color-neutral-300: #d7d3d3;
+  --color-neutral-400: #bab6b6;
+  --color-neutral-500: #9b9797;
+  --color-neutral-600: #7d7979;
+  --color-neutral-700: #605d5d;
+  --color-neutral-800: #444141;
+  --color-neutral-900: #2d2b2b;
+
+  --color-accent-100: #fff2ef;
+  --color-accent-200: #ffe0d9;
+  --color-accent-300: #ffc4b8;
+  --color-accent-400: #ff9783;
+  --color-accent-500: #ff563c;
+  --color-accent-600: #dd2b0f;
+  --color-accent-700: #ae1800;
+  --color-accent-800: #7c1405;
+  --color-accent-900: #4d170e;
+
+  --font-*: initial;
+  --font-sans: var(--font-archivo), system-ui, sans-serif;
+  --font-mono: ui-monospace, Menlo, monospace;
+
+  /* Zero radius everywhere: no rounded-* utilities exist. */
+  --radius-*: initial;
+
+  --shadow-*: initial;
+  --shadow-sm: 0 1px 2px color-mix(in srgb, #2d2b2b 14%, transparent);
+  --shadow-md: 0 3px 10px color-mix(in srgb, #2d2b2b 16%, transparent);
+  --shadow-lg: 0 12px 32px color-mix(in srgb, #2d2b2b 22%, transparent);
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.55;
+    font-weight: 400;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 800;
+    line-height: 1.12;
+    letter-spacing: -0.015em;
+    margin: 0;
+  }
+  h1 { font-size: 42px; }
+  h2 { font-size: 32px; }
+  h3 { font-size: 25px; }
+  h4 { font-size: 20px; }
+  h5 { font-size: 16px; }
+  h6 { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; }
+  a { color: var(--color-accent); text-underline-offset: 3px; }
+  a:hover { color: var(--color-accent-600); }
+  button, input, textarea, select { font: inherit; color: inherit; }
+  button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
+  :focus { outline: none; }
+  :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+  ::selection { background: color-mix(in srgb, var(--color-accent) 30%, transparent); }
+}
+
+/* Striped image placeholders (light for thumbnails, dark for video areas). */
+@utility stripes {
+  background: repeating-linear-gradient(135deg, var(--color-neutral-200) 0 10px, var(--color-neutral-300) 10px 20px);
+}
+@utility stripes-dark {
+  background: repeating-linear-gradient(135deg, var(--color-neutral-800) 0 10px, var(--color-neutral-900) 10px 20px);
+}
+
+/* Black-and-white imagery: apply to real thumbnails and frames. */
+@utility bw {
+  filter: grayscale(1) contrast(1.08);
+}
+
+/* Ink and accent tints for hover/pressed states. */
+@utility hover-ink {
+  &:hover:not(:disabled) { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
+  &:active:not(:disabled) { background: color-mix(in srgb, var(--color-text) 14%, transparent); }
+}
+@utility hover-accent {
+  &:hover:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
+  &:active:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 18%, transparent); }
+}

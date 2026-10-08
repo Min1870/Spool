@@ -64,6 +64,8 @@ plays from storage directly; the API only handles small JSON requests.
 ├─ garage/                # Garage config + one-time bucket/CORS setup script
 ├─ docs/design/           # Spool design spec + modernist.css (source of truth for the look)
 ├─ web/                   # Next.js app (pages, API routes)
+│  └─ shared/             # types + constants used by web AND worker (Video, VideoStatus,
+│                         #   queue name, storage keys). Worker imports ../web/shared.
 ├─ worker/                # BullMQ + FFmpeg service, with its own Dockerfile
 └─ supabase/migrations/   # SQL migrations
 ```
@@ -74,7 +76,7 @@ plays from storage directly; the API only handles small JSON requests.
 docker compose up -d          # start Garage, Redis, worker
 docker compose down           # stop everything
 docker compose logs -f worker # watch worker logs
-cd web && npm run dev         # start Next.js on http://localhost:3000
+cd web && npm run dev         # start Next.js on http://localhost:3000 (loads ../.env)
 ```
 
 Garage has no web console. S3 API: http://localhost:3900. Public files:

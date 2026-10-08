@@ -3,8 +3,8 @@
 A small YouTube-style video app: upload a video in the browser, a background worker
 converts it to adaptive HLS (480p + 720p) with FFmpeg, and viewers watch it with hls.js.
 
-> 🚧 Built in phases. **Done: phase 1 (local infrastructure), phase 2 (database).** The
-> rest of this README grows with each phase.
+> 🚧 Built in phases. **Done: phase 1 (local infrastructure), phase 2 (database),
+> phase 3 (upload).** The rest of this README grows with each phase.
 
 ## How it fits together
 
@@ -207,6 +207,91 @@ key is blocked by RLS.
 - **HTTP 401 with the secret key**: the key is wrong or has a stray space. Copy it again.
   Secret keys only work from servers and scripts, never in a browser.
 - **"Fill in ... in .env first"**: you're still on the placeholder values in `.env`.
+
+## Phase 3: upload page + upload API
+
+The Next.js app lives in `web/`. It has the Spool landing page and an **Upload** page, plus four
+small API routes. The video file goes from the browser **straight to storage**. Our server only
+answers small JSON requests about it.
+
+```
+Browser                               Next.js API (web/app/api/uploads)        Garage / R2
+───────                               ─────────────────────────────────        ───────────
+1. "I want to upload clip.mp4"  ──▶  POST /api/uploads
+                                       checks type + size, creates the
+                                       videos row (status: uploading),
+                                       picks key originals/{id}/clip.mp4
+2. Uppy, for EVERY storage request:
+   "may I start / upload part 3 /
+    complete?"                  ──▶  POST /api/uploads/sign
+                                       checks the rules, returns a URL
+                                       signed for 15 minutes
+   ...then sends it ───────────────────────────────────────────────────────▶  PUT part 3
+3. "done!"                      ──▶  POST /api/uploads/complete
+                                       asks storage "is it really there?",
+                                       status → queued, adds BullMQ job
+   (Cancel)                     ──▶  POST /api/uploads/cancel → status failed
+```
+
+**New concepts, briefly:**
+- **Multipart upload.** Big files are split into parts of about 8 MB, uploaded one by one, then
+  joined by storage. If the network fails, only the part in flight is lost.
+- **Uppy** (`@uppy/core` + `@uppy/aws-s3`) does the splitting, the retries and the resuming.
+  We use it "headless": no Uppy UI, our own Spool-styled drop zone and progress bar.
+- **Signing rules** ([web/lib/server/sign-rules.ts](web/lib/server/sign-rules.ts)). Uppy talks to
+  storage directly, but only with URLs we sign. We only sign multipart steps for the exact key we
+  assigned to that video, and only while it's uploading. Nobody can use our API to write elsewhere.
+- **Don't trust the browser.** File type and size are checked in the browser (quick feedback) *and*
+  on the server (security). On "complete", the server checks storage instead of believing the client.
+- **One `.env` for everything.** `npm run dev` runs [web/scripts/next-with-env.mjs](web/scripts/next-with-env.mjs),
+  which loads the repo-root `.env` before starting Next.js.
+
+### Run it
+
+Garage and Redis must be running (`docker compose up -d` from the repo root). Then in PowerShell:
+
+```powershell
+cd web
+npm install
+npm run dev
+```
+
+Open http://localhost:3000. You should see the Spool landing page. Click **Upload**.
+
+### Test it
+
+1. **Happy path.** Drop any `.mp4`, `.mov` or `.webm` file (or click to choose one) and optionally
+   type a title first. You'll see the progress bar, then **Uploaded** with a video id.
+   - Supabase → Table Editor → `videos`: a new row with status **queued**, your title, and
+     `original_key = originals/<id>/<file name>`.
+   - Redis has the job (the worker that runs it comes in phase 4):
+     ```powershell
+     docker compose exec redis redis-cli LLEN bull:transcode:wait
+     ```
+     Prints the number of waiting jobs (1 after your first upload).
+2. **Wrong file type.** Choose a `.txt` or `.jpg`. You get "Only MP4, MOV and WebM videos are supported."
+   and no row is created.
+3. **Connection drops.** Use a big file (a few hundred MB). In Chrome DevTools (F12) → **Network**,
+   set throttling to "Slow 4G", start the upload, switch to **Offline** for a few seconds, then back.
+   The upload pauses and carries on where it stopped. If it shows **Upload failed** instead, press
+   **Retry**: it continues from the last finished part.
+4. **Cancel.** Start a big upload (throttled as above) and press **Cancel**. The row becomes
+   **failed** with "Upload cancelled.", and the parts already uploaded are deleted from storage.
+5. **The API protects itself** (optional). It refuses requests that skip the rules:
+   ```powershell
+   curl.exe -s -H "Content-Type: application/json" -d '{\"title\":\"x\",\"filename\":\"a.exe\",\"size\":10,\"contentType\":\"application/x-msdownload\"}' http://localhost:3000/api/uploads
+   ```
+   Expected: `{"error":"Only MP4, MOV and WebM videos are supported."}`
+   (That quoting is for Windows PowerShell 5.1. In PowerShell 7, remove the backslashes.)
+
+**Checks for code changes** (from `web/`): `npm run typecheck`, `npm run lint`, `npm test`.
+
+### Troubleshooting
+- **"Invalid environment variables" in the terminal**: a value in the repo-root `.env` is missing or
+  wrong. The message names it. Start the app with `npm run dev` (not `npx next dev`), which loads `../.env`.
+- **Upload fails immediately with a CORS error in the browser console**: open the app at exactly
+  `APP_ORIGIN` (`http://localhost:3000`), then re-run `docker compose run --rm storage-init`.
+- **"Couldn't queue the video for processing"**: Redis isn't running (`docker compose up -d`).
 
 ## Environment variables
 
