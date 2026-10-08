@@ -103,7 +103,7 @@ function StatusPanel({
         {state.phase === "preparing" && "Getting an upload slot…"}
         {state.phase === "uploading" && "Keep this tab open until the upload finishes. It resumes if your connection blinks."}
         {state.phase === "finishing" && "Checking the file and queueing it for processing…"}
-        {state.phase === "done" && "Queued for processing. The worker turns it into HLS in phase 4."}
+        {state.phase === "done" && "Queued for processing. The worker is turning it into 480p and 720p HLS."}
       </p>
 
       {state.phase === "error" && (

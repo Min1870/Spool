@@ -4,7 +4,7 @@ A small YouTube-style video app: upload a video in the browser, a background wor
 converts it to adaptive HLS (480p + 720p) with FFmpeg, and viewers watch it with hls.js.
 
 > 🚧 Built in phases. **Done: phase 1 (local infrastructure), phase 2 (database),
-> phase 3 (upload).** The rest of this README grows with each phase.
+> phase 3 (upload), phase 4 (transcoding worker).** The rest of this README grows with each phase.
 
 ## How it fits together
 
@@ -292,6 +292,94 @@ Open http://localhost:3000. You should see the Spool landing page. Click **Uploa
 - **Upload fails immediately with a CORS error in the browser console**: open the app at exactly
   `APP_ORIGIN` (`http://localhost:3000`), then re-run `docker compose run --rm storage-init`.
 - **"Couldn't queue the video for processing"**: Redis isn't running (`docker compose up -d`).
+
+## Phase 4: the transcoding worker
+
+`worker/` is a separate Node.js + TypeScript program that runs in Docker next to Garage and
+Redis. It takes jobs from the queue and turns each original into adaptive HLS.
+
+```
+Redis queue ──job { videoId }──▶ worker
+                                   1. status → processing
+                                   2. download originals/{id}/... from spool-originals (to /tmp)
+                                   3. ffprobe: duration, audio track?
+                                   4. ffmpeg: one pass → 480p + 720p, 6-second segments, master.m3u8
+                                   5. ffmpeg: thumbnail.jpg (10% in, max 10s)
+                                   6. upload to spool-media at hls/{id}/ (master.m3u8 last)
+                                   7. status → ready (hls_key, thumbnail_key, duration)
+                                   8. delete the /tmp folder (always, even on failure)
+```
+
+Output for one video (public, e.g. `http://spool-media.web.garage.localhost:3902/hls/<id>/master.m3u8`):
+```
+hls/<id>/master.m3u8        lists both qualities with their bandwidth + resolution
+hls/<id>/480p/index.m3u8    list of 480p segments
+hls/<id>/480p/seg_000.ts …  6-second chunks
+hls/<id>/720p/…             same for 720p
+hls/<id>/thumbnail.jpg
+```
+
+**New concepts, briefly:**
+- **HLS (HTTP Live Streaming).** The video is cut into short `.ts` files plus text playlists
+  (`.m3u8`). A player downloads the master playlist, picks a quality that fits the connection, and
+  fetches segments one by one. It can switch quality between segments.
+- **FFmpeg / ffprobe.** The standard command-line tools for video. ffprobe *reads* a file (length,
+  tracks); ffmpeg *converts* it. Node just starts them as child processes and waits.
+- **CRF 23 + bitrate cap.** CRF means "constant quality": simple scenes use few bits, busy scenes more.
+  The cap (1.4 Mbps at 480p, 2.8 Mbps at 720p) stops spikes and gives the player real numbers to
+  choose a quality with.
+- **Keyframes every 6 s** (`-force_key_frames`). Every segment starts with a full picture, aligned in
+  both qualities, so the player can switch quality at any segment.
+- **Retries.** If a job throws (bad file, storage hiccup), BullMQ tries again after 15s, then 30s.
+  After the 3rd failure the video is marked `failed` with FFmpeg's error message.
+- **Stalled jobs.** While working, the worker keeps renewing a "lock" on the job in Redis. If the
+  worker crashes, the lock expires, BullMQ notices the job "stalled" and puts it back in the queue.
+  A restarted worker picks it up (up to 2 times).
+- **Docker image** ([worker/Dockerfile](worker/Dockerfile)). A recipe: start from Node 22 on Debian,
+  install FFmpeg, copy the code, run it as a non-root user. `docker compose` builds and runs it.
+
+### Run it
+
+```powershell
+docker compose up -d --build
+docker compose logs -f worker
+```
+The first build takes a couple of minutes (it downloads FFmpeg). You should see
+`[worker] Ready. Waiting for "transcode" jobs`. Any upload that was waiting in the queue is processed right away.
+Press Ctrl+C to stop following the logs (the worker keeps running).
+
+After changing code in `worker/`, rebuild with `docker compose up -d --build worker`.
+
+### Test it
+
+1. **Happy path.** Keep `docker compose logs -f worker` open, and upload a short video at
+   http://localhost:3000/upload (with `cd web` + `npm run dev` running). The log shows
+   `Downloading` → `Duration …` → `Transcoding…` → `Uploaded N files` → `Done ✓`.
+   In Supabase the row goes `queued` → `processing` → `ready`, with `hls_key`, `thumbnail_key` and `duration` filled in.
+2. **Look at the result.** Open these in your browser (replace `<id>` with the video's id):
+   - `http://spool-media.web.garage.localhost:3902/hls/<id>/thumbnail.jpg` shows the thumbnail
+   - `http://spool-media.web.garage.localhost:3902/hls/<id>/master.m3u8` downloads the playlist.
+     Open it in a text editor: two `#EXT-X-STREAM-INF` lines, 480p and 720p.
+   - Most browsers can't play `.m3u8` directly (Safari can). The player comes in phase 5.
+3. **A broken file.** Rename any non-video file (e.g. a `.txt` with some text) to `broken.mp4` and
+   upload it. The worker log shows attempts 1, 2, 3 (15s and 30s apart), then `FAILED for good`.
+   The row becomes `failed`, with "This file couldn't be read as a video…" in `error`.
+4. **A crash.** Upload a long video (a few minutes). While the log says `Transcoding…`, kill the worker:
+   ```powershell
+   docker compose kill worker
+   docker compose up -d worker
+   ```
+   Within about 30 seconds the log shows `stalled (worker crashed?), back in the queue`, then the job
+   starts over and finishes with `Done ✓`. The row ends up `ready`.
+5. **Unit tests** for the FFmpeg arguments: `cd worker`, `npm install`, `npm test`.
+
+### Troubleshooting
+- **`Invalid environment variables` in the worker log**: fix the repo-root `.env`, then
+  `docker compose up -d worker`.
+- **Build fails with "Read-only file system" or "no space left"**: the disk Docker Desktop uses is
+  full. Free space, or move Docker's disk (Docker Desktop → Settings → Resources → Advanced →
+  Disk image location) to a bigger drive.
+- **Video stuck on `queued`**: is the worker running? `docker compose ps`, then `docker compose logs worker`.
 
 ## Environment variables
 

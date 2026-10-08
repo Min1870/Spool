@@ -1,0 +1,19 @@
+{
+  // The worker runs TypeScript directly with `tsx` (no build step). tsc is only used to
+  // type-check (`npm run typecheck`).
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "isolatedModules": true
+  },
+  // ../web/shared holds the types and constants shared with the web app.
+  "include": ["src/**/*.ts", "../web/shared/video.ts"]
+}

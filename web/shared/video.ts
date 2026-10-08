@@ -52,3 +52,13 @@ export function originalKey(videoId: string, filename: string): string {
 export function hlsFolder(videoId: string): string {
   return `hls/${videoId}/`;
 }
+
+/** The HLS "master playlist" that players open: hls/{videoId}/master.m3u8 */
+export function hlsMasterKey(videoId: string): string {
+  return `${hlsFolder(videoId)}master.m3u8`;
+}
+
+/** The thumbnail image: hls/{videoId}/thumbnail.jpg */
+export function thumbnailKey(videoId: string): string {
+  return `${hlsFolder(videoId)}thumbnail.jpg`;
+}

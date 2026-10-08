@@ -73,7 +73,7 @@ plays from storage directly; the API only handles small JSON requests.
 ## Commands
 
 ```
-docker compose up -d          # start Garage, Redis, worker
+docker compose up -d --build  # start Garage, Redis, worker (--build: rebuild worker image)
 docker compose down           # stop everything
 docker compose logs -f worker # watch worker logs
 cd web && npm run dev         # start Next.js on http://localhost:3000 (loads ../.env)

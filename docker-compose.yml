@@ -1,6 +1,6 @@
 # Local infrastructure for Spool.
 #
-#   docker compose up -d      start everything in the background
+#   docker compose up -d --build   start everything in the background (--build: rebuild the worker image)
 #   docker compose ps         see what's running and whether it's healthy
 #   docker compose logs -f    follow the logs
 #   docker compose down       stop (data is kept in named volumes)
@@ -83,7 +83,34 @@ services:
       retries: 10
     restart: unless-stopped
 
-  # The FFmpeg worker is added in phase 4.
+  # ── Transcoding worker ─────────────────────────────────────────────────────
+  # Our own image (worker/Dockerfile): Node.js + FFmpeg. Takes "transcode" jobs from
+  # Redis, turns originals into HLS, uploads the result, updates the database.
+  #   docker compose up -d --build worker   rebuild + restart after code changes
+  #   docker compose logs -f worker         watch it work
+  worker:
+    build:
+      context: . # repo root, so the image can include web/shared (see worker/Dockerfile)
+      dockerfile: worker/Dockerfile
+    # All the app's variables (Supabase keys, bucket names, ...) from the repo-root .env...
+    env_file: .env
+    # ...except the addresses: inside Docker's network, other containers are reached by
+    # their service name, not "localhost" (localhost would mean the worker container itself).
+    environment:
+      S3_ENDPOINT: http://garage:3900
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      garage:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      storage-init:
+        condition: service_completed_successfully
+    # On `docker compose stop`, give an in-progress job up to 60s to finish before the
+    # container is killed (a killed job isn't lost: it stalls and is retried).
+    stop_grace_period: 60s
+    # Start again automatically if it crashes (or after a reboot).
+    restart: unless-stopped
 
 volumes:
   garage-meta:
