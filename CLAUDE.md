@@ -129,6 +129,14 @@ rules: `docs/design/modernist.css`. Follow the visual design there. Behaviour fo
 7. Public API (`GET /api/videos/[id]`) with CORS + `/embed/[id]` iframe page
 8. Deploy notes: VPS (e.g. DigitalOcean Droplet) + Cloudflare R2
 
+## Client site (MSW)
+
+`D:\Work Folder\MSW` is a separate Next.js site (its own repo and CLAUDE.md) that shows Spool
+videos alongside a TMDB catalogue. It talks to Spool **only** through the public API
+(`GET /api/videos`, `GET /api/videos/[id]`, both with CORS), from the browser, with no keys.
+Keep those two responses backwards compatible (`PublicVideo` in `web/shared/video.ts`), or
+update MSW's `src/lib/spool.ts` at the same time. Spool runs on port 3000, MSW on 3001.
+
 ## Out of scope for now
 
 Comments, likes, recommendations, live streaming, payments, and more than two

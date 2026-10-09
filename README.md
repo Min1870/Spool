@@ -502,6 +502,7 @@ Other websites can now **embed** Spool videos and **read** video data from JavaS
 | What | URL |
 |---|---|
 | Public JSON API (with CORS) | `GET /api/videos/<id>` |
+| Public list of ready videos, newest first (with CORS) | `GET /api/videos?limit=20` (max 50) → `{ "videos": [...] }` |
 | Player-only page for `<iframe>` | `/embed/<id>` |
 | Copyable embed code | on every watch page, under **Embed on your site** |
 
@@ -565,6 +566,23 @@ With Docker and `npm run dev` (in `web`) running:
 5. **Framing protection** (optional). In DevTools on the pretend blog, run
    `document.body.innerHTML += '<iframe src="http://localhost:3000/login" width=600 height=300></iframe>'`.
    The frame stays empty and the console says it refused because of `frame-ancestors`. Only `/embed` can be framed.
+
+### A real client site: MSW
+
+`D:\Work Folder\MSW` is a separate Netflix-style site that shows Spool videos next to its TMDB movie
+catalogue ("Fresh from Creators" row, **Creators** page, its own player). It uses **only** the public API
+above, called from the browser, with no keys. It's the "admin site vs client site" split in practice:
+Spool is where you upload, MSW is where people watch. To run both:
+
+```powershell
+# Spool (this repo): Docker + web app on port 3000
+docker compose up -d
+cd web; npm run dev
+
+# MSW (second terminal): port 3001
+cd "D:\Work Folder\MSW"; npm run dev
+```
+Open http://localhost:3001. See MSW's README for its `NEXT_PUBLIC_SPOOL_API_URL` setting.
 
 ## Environment variables
 
