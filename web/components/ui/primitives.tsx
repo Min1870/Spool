@@ -74,6 +74,53 @@ export function Field({
   );
 }
 
+/** Segmented radio group (".seg"). Arrow-key navigation comes from the native radios. */
+export function Seg<T extends string>({
+  name,
+  value,
+  options,
+  onChange,
+  label,
+  size = "md",
+}: {
+  name: string;
+  value: T;
+  options: ReadonlyArray<{ value: T; label: string }>;
+  onChange: (value: T) => void;
+  label?: string;
+  size?: "sm" | "md";
+}) {
+  return (
+    <div role="radiogroup" aria-label={label} className="inline-flex self-start overflow-hidden border border-divider">
+      {options.map((opt, i) => {
+        const checked = opt.value === value;
+        return (
+          <label
+            key={opt.value}
+            className={cn(
+              "inline-flex cursor-pointer items-center whitespace-nowrap",
+              "has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-2 has-[:focus-visible]:outline-accent",
+              size === "md" ? "px-4 py-2.5 text-[14px]" : "px-3 py-[7px] text-[13px]",
+              i > 0 && "border-l border-divider",
+              checked ? "bg-accent text-bg" : "hover-ink",
+            )}
+          >
+            <input
+              type="radio"
+              className="sr-only"
+              name={name}
+              value={opt.value}
+              checked={checked}
+              onChange={() => onChange(opt.value)}
+            />
+            {opt.label}
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
 type InputProps = Omit<ComponentProps<"input">, "size"> & { size?: "md" | "lg"; mono?: boolean };
 
 /** Text input (".input"). */

@@ -4,7 +4,8 @@ A small YouTube-style video app: upload a video in the browser, a background wor
 converts it to adaptive HLS (480p + 720p) with FFmpeg, and viewers watch it with hls.js.
 
 > 🚧 Built in phases. **Done: phase 1 (local infrastructure), phase 2 (database),
-> phase 3 (upload), phase 4 (transcoding worker).** The rest of this README grows with each phase.
+> phase 3 (upload), phase 4 (transcoding worker), phase 5 (library + player).** The rest of this
+> README grows with each phase.
 
 ## How it fits together
 
@@ -380,6 +381,47 @@ After changing code in `worker/`, rebuild with `docker compose up -d --build wor
   full. Free space, or move Docker's disk (Docker Desktop → Settings → Resources → Advanced →
   Disk image location) to a bigger drive.
 - **Video stuck on `queued`**: is the worker running? `docker compose ps`, then `docker compose logs worker`.
+
+## Phase 5: video list + watch page
+
+Two new pages and one API route in `web/`:
+
+| URL | What it does |
+|---|---|
+| `/videos` | **My videos**: every video, newest first, with B/W thumbnail, duration and status. While any video is still processing, the page refreshes its data every 4 s, so cards turn ready by themselves. |
+| `/watch/<id>` | **Watch page**: the player once the video is ready; before that, a status screen (Queued / Processing / failed with the reason) that checks `GET /api/videos/<id>` every 3 s. Plus title, "Copy link" and **Up next**. |
+| `GET /api/videos/<id>` | JSON: status, error, duration and, once ready, the `hlsUrl` and `thumbnailUrl`. |
+
+**New concepts, briefly:**
+- **Server Components.** `/videos` and `/watch/<id>` read the database on the server and send ready-made
+  HTML, so there's no loading spinner on first view. Only the interactive parts (player, polling) run in the browser.
+- **Polling.** The browser asks "is it ready yet?" every few seconds and stops once the answer is final
+  (ready or failed). Simple and reliable for a few users.
+- **hls.js + Media Source Extensions.** Chrome, Edge and Firefox can't play `.m3u8` on their own. hls.js
+  downloads the playlist and segments itself and feeds them to the `<video>` element. Safari plays HLS
+  natively, so there the player just sets the video's `src`.
+- **Adaptive bitrate (ABR).** "Auto" lets hls.js pick 480p or 720p from the measured download speed; the
+  label shows the current choice (e.g. `Auto · 720p`). Picking 480p or 720p locks it.
+- **Keys → URLs.** The database stores storage keys; the server turns them into URLs with `S3_PUBLIC_URL`.
+  Moving to R2 only changes that variable, never the data.
+
+### Test it
+
+With Docker (`docker compose up -d`) and the web app (`cd web`, `npm run dev`) running:
+
+1. **Library.** Open http://localhost:3000/videos (or click **My videos**). You see your videos as cards with
+   black-and-white thumbnails and durations.
+2. **Watch.** Click a card. Press the red ▶ square. The video plays; the time counts up; clicking the thin
+   red bar at the bottom jumps to that point.
+3. **Quality.** Below the video, **Auto · 720p** (or 480p) shows what hls.js picked. Click **480p** and the
+   picture switches within a few seconds. In DevTools (F12) → **Network**, filter by `.ts`: segments now come
+   from `480p/`. Set throttling to "Slow 4G" with **Auto** selected and watch it drop to 480p.
+4. **Processing screen.** Upload a new video, then click **My videos → your new card** right away. You see
+   **Queued** / **Processing** with a pulsing bar. Don't reload: the player appears by itself when it's ready.
+   The library card also turns ready by itself.
+5. **Failed screen.** Upload a renamed non-video file (`broken.mp4`) and open its card: after the retries
+   (about 45 s) it shows "This video couldn't be processed." with the reason.
+6. **API.** Open `http://localhost:3000/api/videos/<id>` in the browser to see the JSON the watch page polls.
 
 ## Environment variables
 

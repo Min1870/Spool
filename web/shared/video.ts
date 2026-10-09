@@ -23,6 +23,29 @@ export type Video = {
   created_at: string;
 };
 
+/**
+ * A video as the browser sees it (pages and GET /api/videos/[id]). Storage keys are
+ * turned into full URLs on the server, and internal fields (original_key, user_id) are left out.
+ */
+export type PublicVideo = {
+  id: string;
+  title: string;
+  status: VideoStatus;
+  /** Why processing failed, when status is "failed". */
+  error: string | null;
+  /** Seconds, once processed. */
+  duration: number | null;
+  createdAt: string;
+  /** The HLS master playlist, once ready. */
+  hlsUrl: string | null;
+  thumbnailUrl: string | null;
+};
+
+/** Statuses where the video won't change any more (no need to keep polling). */
+export function isFinalStatus(status: VideoStatus): boolean {
+  return status === "ready" || status === "failed";
+}
+
 /** File types we accept: MP4, MOV and WebM (matches the design's "MP4 · MOV · WebM"). */
 export const ALLOWED_VIDEO_TYPES = ["video/mp4", "video/quicktime", "video/webm"] as const;
 
