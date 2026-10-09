@@ -87,12 +87,14 @@ export function useUploader() {
     };
 
     const onError = (_file: unknown, error: { message: string }) => {
-      setState({
-        phase: "error",
-        file: fileRef.current,
-        message: `${error.message}. Check your connection, then press Retry to continue where it stopped.`,
-        canRetry: true,
-      });
+      // "Network error" = storage never answered. Locally that almost always means Docker
+      // (and with it Garage) isn't running, so say so in development builds.
+      const storageDown = /network error/i.test(error.message);
+      const hint =
+        storageDown && process.env.NODE_ENV === "development"
+          ? "Can't reach storage. Is Docker running? (docker compose up -d) Then press Retry."
+          : `${error.message}. Check your connection, then press Retry to continue where it stopped.`;
+      setState({ phase: "error", file: fileRef.current, message: hint, canRetry: true });
     };
 
     uppy.on("upload-progress", onProgress);

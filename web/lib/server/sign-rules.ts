@@ -31,8 +31,14 @@ const MAX_PARTS = 10_000;
 
 export type SignDecision = { ok: true; request: SignableRequest } | { ok: false; status: number; error: string };
 
-export function decideSign(video: Pick<Video, "status" | "original_key"> | null, req: UppyRequest): SignDecision {
+export function decideSign(
+  video: Pick<Video, "status" | "original_key" | "user_id"> | null,
+  req: UppyRequest,
+  userId: string,
+): SignDecision {
   if (!video) return { ok: false, status: 404, error: "Video not found." };
+  // Only the person who started the upload may continue (or abort) it.
+  if (video.user_id !== userId) return { ok: false, status: 403, error: "This upload belongs to someone else." };
   if (!video.original_key || req.key !== video.original_key) {
     return { ok: false, status: 403, error: "That storage key doesn't belong to this upload." };
   }

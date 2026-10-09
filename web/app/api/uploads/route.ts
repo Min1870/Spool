@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ALLOWED_VIDEO_TYPES, originalKey } from "@shared/video";
 import { env } from "@/lib/server/env";
 import { errorResponse, readJson, serverError } from "@/lib/server/http";
+import { requireUser } from "@/lib/server/require-user";
 import { supabaseAdmin } from "@/lib/server/supabase";
 
 // POST /api/uploads: step 1 of an upload.
@@ -18,6 +19,10 @@ const bodySchema = z.object({
 });
 
 export async function POST(request: Request) {
+  // Only signed-in users may upload. The row records who it belongs to.
+  const auth = await requireUser();
+  if (auth.response) return auth.response;
+
   const { data, response } = await readJson(request, bodySchema);
   if (response) return response;
 
@@ -37,7 +42,7 @@ export async function POST(request: Request) {
     // 1. Insert the row. Postgres generates the id, and we read it back.
     const { data: row, error } = await db
       .from("videos")
-      .insert({ title: data.title, status: "uploading" })
+      .insert({ title: data.title, status: "uploading", user_id: auth.user.id })
       .select("id")
       .single();
     if (error) return serverError("insert video", error);

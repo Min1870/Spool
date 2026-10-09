@@ -36,10 +36,15 @@ export async function getPublicVideo(id: string): Promise<PublicVideo | null> {
   return data ? toPublicVideo(data as Video) : null;
 }
 
-/** Newest first. */
-export async function listPublicVideos({ limit = 60, onlyReady = false } = {}): Promise<PublicVideo[]> {
+/** Newest first. `ownerId` limits the list to one user's videos ("My videos"). */
+export async function listPublicVideos({
+  limit = 60,
+  onlyReady = false,
+  ownerId,
+}: { limit?: number; onlyReady?: boolean; ownerId?: string } = {}): Promise<PublicVideo[]> {
   let query = supabaseAdmin().from("videos").select("*").order("created_at", { ascending: false }).limit(limit);
   if (onlyReady) query = query.eq("status", "ready");
+  if (ownerId) query = query.eq("user_id", ownerId);
   const { data, error } = await query;
   if (error) throw new Error(`Couldn't load videos: ${error.message}`);
   return (data as Video[]).map(toPublicVideo);

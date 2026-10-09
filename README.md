@@ -4,8 +4,8 @@ A small YouTube-style video app: upload a video in the browser, a background wor
 converts it to adaptive HLS (480p + 720p) with FFmpeg, and viewers watch it with hls.js.
 
 > 🚧 Built in phases. **Done: phase 1 (local infrastructure), phase 2 (database),
-> phase 3 (upload), phase 4 (transcoding worker), phase 5 (library + player).** The rest of this
-> README grows with each phase.
+> phase 3 (upload), phase 4 (transcoding worker), phase 5 (library + player), phase 6 (sign in).**
+> The rest of this README grows with each phase.
 
 ## How it fits together
 
@@ -422,6 +422,78 @@ With Docker (`docker compose up -d`) and the web app (`cd web`, `npm run dev`) r
 5. **Failed screen.** Upload a renamed non-video file (`broken.mp4`) and open its card: after the retries
    (about 45 s) it shows "This video couldn't be processed." with the reason.
 6. **API.** Open `http://localhost:3000/api/videos/<id>` in the browser to see the JSON the watch page polls.
+
+## Phase 6: sign in (Supabase Auth)
+
+Anyone can still **watch** (`/watch/<id>` is public). To **upload** or see **My videos** you need an
+account. Each video now belongs to the user who uploaded it.
+
+| What | Where |
+|---|---|
+| Sign in / create account page | `/login` ([web/app/login](web/app/login)) |
+| Sign in, sign up, sign out (Server Actions) | [web/app/login/actions.ts](web/app/login/actions.ts) |
+| "Confirm your email" link lands here | `/auth/callback` |
+| Session refresh + redirect to `/login` for `/upload` and `/videos` | [web/proxy.ts](web/proxy.ts) |
+| Every upload API route checks the user and that the video is theirs | [web/app/api/uploads](web/app/api/uploads) |
+| Database rules for the browser key | [supabase/migrations/0002_auth_policies.sql](supabase/migrations/0002_auth_policies.sql) |
+
+**New concepts, briefly:**
+- **Session cookies.** On sign-in Supabase issues an *access token* (proves who you are, expires after
+  about an hour) and a *refresh token* (gets a new access token). They're stored in cookies, so every
+  request to our server carries them. [web/proxy.ts](web/proxy.ts) refreshes them before they expire.
+- **Verify, don't trust.** The server reads the user with `getClaims()`, which checks the token's
+  signature. Editing a cookie by hand gets you rejected, not logged in as someone else.
+- **Authentication vs authorization.** *Who are you?* (signed in, or 401) vs *are you allowed?*
+  (your own video, or 403). Each upload route checks both.
+- **Server Actions.** Functions marked `"use server"` that a `<form>` can call directly. The password goes
+  from the form to our server to Supabase; it's never stored by us.
+- **Row Level Security policies.** Rules inside Postgres for the browser-safe key: anyone can read
+  *ready* videos, signed-in users can read their *own*, nobody can write. Our server uses the secret key,
+  which bypasses them, so these are a second lock rather than the first.
+
+### Set it up (Supabase dashboard, one time)
+
+1. **Run the new migration.** SQL Editor → New query → paste
+   [supabase/migrations/0002_auth_policies.sql](supabase/migrations/0002_auth_policies.sql) → **Run**.
+2. **Tell Supabase where the app lives.** Authentication → **URL Configuration**:
+   - Site URL: `http://localhost:3000`
+   - Redirect URLs: add `http://localhost:3000/auth/callback`
+3. **Email confirmation (choose one):**
+   - *Easiest for local development:* Authentication → **Sign In / Providers** → **Email** → turn off
+     **Confirm email** → Save. New accounts are signed in right away.
+   - *Or keep it on:* after "Create account" you get an email; click its link. (Supabase's built-in
+     email service only sends a few emails per hour. Fine for testing, not for production.)
+
+### Test it
+
+With Docker and `npm run dev` (in `web`) running:
+
+1. **Signed out.** Open http://localhost:3000/upload. You're sent to **Sign in to upload**. The nav shows
+   **Sign in**. A watch page (e.g. from an old link) still plays without signing in.
+2. **Create an account.** On `/login`, choose **Create account**, enter an email and a password (8+
+   characters). You land on the upload page, and the nav shows your email, **My videos** and **Sign out**.
+3. **Upload.** Upload a video. In Supabase → Table Editor → `videos`, its `user_id` is now filled in. Compare
+   it with Authentication → Users: it's your user's id.
+4. **My videos** shows only your videos. Videos uploaded *before* this phase have no owner (`user_id` is
+   empty), so they don't appear. To make them yours, run this in the SQL Editor with your email:
+   ```sql
+   update videos
+   set user_id = (select id from auth.users where email = 'you@example.com')
+   where user_id is null;
+   ```
+5. **Wrong password.** Sign out, then sign in with a wrong password: "Wrong email or password.", and the
+   email stays filled in.
+6. **Someone else's upload** (optional). Create a second account in a private/incognito window. Its
+   **My videos** is empty, and the API refuses to sign, complete or cancel uploads that aren't yours (403/404).
+7. **Database check.** `node --env-file=.env scripts/check-db.mjs` (from the repo root) still passes, and now
+   reports how many *ready* videos the browser key can see.
+
+### Troubleshooting
+- **"Confirm your email first"**: click the link in the email, or turn off **Confirm email** (step 3 above).
+- **The email link opens "That link didn't work"**: the link expired or was opened in a different browser.
+  Sign in normally, or sign up again.
+- **"Invalid environment variables … NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"**: copy the publishable key
+  (`sb_publishable_…`) into `.env`.
 
 ## Environment variables
 

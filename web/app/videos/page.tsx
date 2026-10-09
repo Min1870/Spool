@@ -1,9 +1,11 @@
+import { redirect } from "next/navigation";
 import { isFinalStatus } from "@shared/video";
 import { PageHeader } from "@/components/PageHeader";
 import { Button, Skeleton } from "@/components/ui";
 import { AutoRefresh } from "@/components/videos/AutoRefresh";
 import { VideoCard } from "@/components/videos/VideoCard";
 import { listPublicVideos } from "@/lib/server/videos";
+import { currentUser } from "@/lib/supabase/server";
 
 export const metadata = { title: "My videos" };
 // Always read fresh data from the database (never serve a cached copy of this page).
@@ -11,9 +13,11 @@ export const dynamic = "force-dynamic";
 
 // The library (docs/design/README.md, screen 5). A Server Component: it reads the
 // database on the server and sends finished HTML to the browser. No API call needed.
-// Until auth arrives in phase 6, "My videos" shows every video.
+// Shows only the signed-in user's videos (proxy.ts sends signed-out visitors to /login).
 export default async function VideosPage() {
-  const videos = await listPublicVideos();
+  const user = await currentUser();
+  if (!user) redirect("/login?next=/videos");
+  const videos = await listPublicVideos({ ownerId: user.id });
   const stillWorking = videos.some((v) => !isFinalStatus(v.status));
 
   return (

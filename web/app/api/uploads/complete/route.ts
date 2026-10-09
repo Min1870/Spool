@@ -3,6 +3,7 @@ import { z } from "zod";
 import { env } from "@/lib/server/env";
 import { errorResponse, readJson, serverError } from "@/lib/server/http";
 import { transcodeQueue } from "@/lib/server/queue";
+import { requireUser } from "@/lib/server/require-user";
 import { originalSize } from "@/lib/server/s3";
 import { supabaseAdmin } from "@/lib/server/supabase";
 
@@ -13,6 +14,9 @@ import { supabaseAdmin } from "@/lib/server/supabase";
 const bodySchema = z.object({ videoId: z.uuid() });
 
 export async function POST(request: Request) {
+  const auth = await requireUser();
+  if (auth.response) return auth.response;
+
   const { data, response } = await readJson(request, bodySchema);
   if (response) return response;
   const { videoId } = data;
@@ -21,11 +25,12 @@ export async function POST(request: Request) {
     const db = supabaseAdmin();
     const { data: video, error } = await db
       .from("videos")
-      .select("status, original_key")
+      .select("status, original_key, user_id")
       .eq("id", videoId)
       .maybeSingle();
     if (error) return serverError("load video", error);
     if (!video) return errorResponse(404, "Video not found.");
+    if (video.user_id !== auth.user.id) return errorResponse(403, "This upload belongs to someone else.");
 
     // Calling "complete" twice (e.g. a double click or a retry) is harmless.
     if (video.status !== "uploading") return NextResponse.json({ videoId, status: video.status });

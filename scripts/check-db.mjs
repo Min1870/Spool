@@ -79,12 +79,13 @@ else fail("Couldn't delete the test row", removed.data);
 if (!publishableKey || publishableKey === "sb_publishable_xxx") {
   console.log("- Skipped RLS check: NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY isn't set.");
 } else {
-  // With RLS on and no policies, a read either returns zero rows or a permission
-  // error (depending on the project's default grants). Both mean "protected".
-  const anonRead = await rest(publishableKey, "?select=id&limit=1");
-  if (anonRead.ok && anonRead.data.length === 0) pass("Publishable key sees no rows (RLS is on)");
-  else if (!anonRead.ok) pass(`Publishable key can't read the table (HTTP ${anonRead.status})`);
-  else fail("Publishable key could read rows. Is RLS enabled?", anonRead.data);
+  // The publishable key may only see READY videos (policy from 0002_auth_policies.sql),
+  // or nothing at all if only 0001 has been applied. Never processing/failed ones.
+  const anonRead = await rest(publishableKey, "?select=id,status&limit=100");
+  if (!anonRead.ok) pass(`Publishable key can't read the table (HTTP ${anonRead.status})`);
+  else if (anonRead.data.every((r) => r.status === "ready"))
+    pass(`Publishable key sees only ready videos (${anonRead.data.length} visible, RLS is on)`);
+  else fail("Publishable key can see videos that aren't ready. Is RLS enabled?", anonRead.data);
 
   // ...and writes are refused.
   const anonInsert = await rest(publishableKey, "", {

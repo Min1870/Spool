@@ -13,6 +13,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1147.0",
     "@aws-sdk/s3-request-presigner": "^3.1147.0",
+    "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.117.3",
     "@uppy/aws-s3": "^6.2.2",
     "@uppy/core": "^6.2.0",
