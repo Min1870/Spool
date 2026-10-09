@@ -25,7 +25,20 @@ export function toPublicVideo(v: Video): PublicVideo {
     // Only hand out playback URLs once the video is really ready.
     hlsUrl: v.status === "ready" ? publicUrl(v.hls_key) : null,
     thumbnailUrl: v.status === "ready" ? publicUrl(v.thumbnail_key) : null,
+    watchUrl: appUrl(`/watch/${v.id}`),
+    embedUrl: appUrl(`/embed/${v.id}`),
   };
+}
+
+/** Full URL of a page on our own site (APP_ORIGIN), for links other websites use. */
+export function appUrl(path: string): string {
+  return `${env().APP_ORIGIN.replace(/\/+$/, "")}${path}`;
+}
+
+/** The HTML snippet other websites paste to embed a video. */
+export function embedSnippet(video: Pick<PublicVideo, "embedUrl" | "title">): string {
+  const title = video.title.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  return `<iframe src="${video.embedUrl}" title="${title}" width="640" height="360" style="border:0" allow="fullscreen; picture-in-picture" allowfullscreen></iframe>`;
 }
 
 /** One video, or null if the id is malformed or unknown. */

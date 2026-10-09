@@ -16,7 +16,18 @@ import { formatDuration } from "@/lib/format";
 
 type Level = { index: number; height: number };
 
-export function Player({ src, poster, title }: { src: string; poster?: string | null; title: string }) {
+type PlayerProps = {
+  src: string;
+  poster?: string | null;
+  title: string;
+  /** "page": 16:9 box on the watch page. "embed": fills the whole iframe (see app/embed). */
+  variant?: "page" | "embed";
+  /** In embeds: link back to the full watch page. */
+  watchUrl?: string;
+};
+
+export function Player({ src, poster, title, variant = "page", watchUrl }: PlayerProps) {
+  const embed = variant === "embed";
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -114,8 +125,11 @@ export function Player({ src, poster, title }: { src: string; poster?: string | 
   ];
 
   return (
-    <div className="flex flex-col gap-3">
-      <div ref={containerRef} className="relative aspect-video max-h-[72vh] w-full bg-neutral-900">
+    <div className={embed ? "flex h-dvh flex-col bg-bg" : "flex flex-col gap-3"}>
+      <div
+        ref={containerRef}
+        className={embed ? "relative min-h-0 w-full flex-1 bg-neutral-900" : "relative aspect-video max-h-[72vh] w-full bg-neutral-900"}
+      >
         <video
           ref={videoRef}
           poster={poster ?? undefined}
@@ -138,14 +152,18 @@ export function Player({ src, poster, title }: { src: string; poster?: string | 
           </div>
         )}
 
-        {/* 80px red play/pause square, bottom left */}
+        {/* Red play/pause square, bottom left (80px on the watch page, smaller in embeds) */}
         <button
           type="button"
           onClick={togglePlay}
           aria-label={playing ? "Pause" : "Play"}
-          className="absolute bottom-8 left-6 flex size-20 items-center justify-center bg-accent text-bg hover:bg-accent-600"
+          className={
+            embed
+              ? "absolute bottom-5 left-4 flex size-14 items-center justify-center bg-accent text-bg hover:bg-accent-600"
+              : "absolute bottom-8 left-6 flex size-20 items-center justify-center bg-accent text-bg hover:bg-accent-600"
+          }
         >
-          {playing ? <Pause size={32} fill="currentColor" /> : <Play size={32} fill="currentColor" />}
+          {playing ? <Pause size={embed ? 24 : 32} fill="currentColor" /> : <Play size={embed ? 24 : 32} fill="currentColor" />}
         </button>
 
         {/* 6px scrubber along the bottom edge: click (or arrow keys) to seek */}
@@ -165,7 +183,7 @@ export function Player({ src, poster, title }: { src: string; poster?: string | 
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className={embed ? "flex items-center justify-between gap-3 px-3 py-2" : "flex flex-wrap items-center justify-between gap-3"}>
         <span className="text-[13px] tabular-nums">
           {formatDuration(time)} / {formatDuration(duration)}
         </span>
@@ -176,6 +194,18 @@ export function Player({ src, poster, title }: { src: string; poster?: string | 
           <Button variant="secondary" onClick={() => void containerRef.current?.requestFullscreen()} aria-label="Full screen">
             <Maximize size={16} />
           </Button>
+          {embed && watchUrl && (
+            // Opens the full Spool watch page in a new tab (outside the embedding site).
+            <a
+              href={watchUrl}
+              target="_blank"
+              rel="noopener"
+              className="flex items-center gap-1.5 text-[13px] font-extrabold text-text no-underline hover:text-accent"
+            >
+              <span className="block size-2.5 bg-accent" />
+              Spool ↗
+            </a>
+          )}
         </div>
       </div>
     </div>

@@ -4,8 +4,8 @@ A small YouTube-style video app: upload a video in the browser, a background wor
 converts it to adaptive HLS (480p + 720p) with FFmpeg, and viewers watch it with hls.js.
 
 > 🚧 Built in phases. **Done: phase 1 (local infrastructure), phase 2 (database),
-> phase 3 (upload), phase 4 (transcoding worker), phase 5 (library + player), phase 6 (sign in).**
-> The rest of this README grows with each phase.
+> phase 3 (upload), phase 4 (transcoding worker), phase 5 (library + player), phase 6 (sign in),
+> phase 7 (public API + embeds).** The rest of this README grows with each phase.
 
 ## How it fits together
 
@@ -494,6 +494,77 @@ With Docker and `npm run dev` (in `web`) running:
   Sign in normally, or sign up again.
 - **"Invalid environment variables … NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"**: copy the publishable key
   (`sb_publishable_…`) into `.env`.
+
+## Phase 7: public API + embeddable player
+
+Other websites can now **embed** Spool videos and **read** video data from JavaScript.
+
+| What | URL |
+|---|---|
+| Public JSON API (with CORS) | `GET /api/videos/<id>` |
+| Player-only page for `<iframe>` | `/embed/<id>` |
+| Copyable embed code | on every watch page, under **Embed on your site** |
+
+`GET /api/videos/<id>` returns:
+```json
+{
+  "id": "8f794c8a-…", "title": "Test Title", "status": "ready", "error": null,
+  "duration": 17.88, "createdAt": "2026-10-08T06:02:05Z",
+  "hlsUrl": "http://spool-media.web.garage.localhost:3902/hls/8f794c8a-…/master.m3u8",
+  "thumbnailUrl": "…/thumbnail.jpg",
+  "watchUrl": "http://localhost:3000/watch/8f794c8a-…",
+  "embedUrl": "http://localhost:3000/embed/8f794c8a-…"
+}
+```
+While a video is processing, `status` is `queued`/`processing` and the URLs to media are `null`, so a
+site can poll until it's `ready`. Unknown ids get `404 {"error":"Video not found."}`.
+
+Embed code (the watch page fills in the right URL and title):
+```html
+<iframe src="http://localhost:3000/embed/<id>" title="…" width="640" height="360"
+        style="border:0" allow="fullscreen; picture-in-picture" allowfullscreen></iframe>
+```
+
+**New concepts, briefly:**
+- **Origin.** Scheme + host + port, e.g. `http://localhost:3000`. `http://localhost:5500` is a *different*
+  origin, as is any other website.
+- **CORS.** By default a page may only *read* responses from its own origin. Our public API sends
+  `Access-Control-Allow-Origin: *` ("anyone may read this"). That's safe because the data is public and the API
+  never uses cookies or changes anything. The upload API deliberately sends **no** CORS headers.
+- **Preflight.** For some requests the browser first asks with `OPTIONS` ("may I?"). The API answers that too.
+- **iframe + `frame-ancestors`.** An iframe shows one page inside another. The `Content-Security-Policy:
+  frame-ancestors` header decides who may do that. `/embed/*` allows everyone; every other page allows only
+  Spool itself, which blocks **clickjacking** (a hostile site hiding our login or upload page in an invisible frame).
+- **Route groups.** Normal pages moved to `web/app/(site)/` so they share the nav + footer. The `(site)` folder
+  doesn't appear in URLs. `/embed` lives outside it, so embeds show only the player.
+- **Why the video still plays inside someone else's site:** the iframe page is on Spool's origin, and the
+  public bucket's CORS rule (from phase 1) allows any origin to `GET` segments.
+
+### Test it
+
+With Docker and `npm run dev` (in `web`) running:
+
+1. **API in the browser.** Open a watch page, scroll to **Embed on your site**, click the
+   `GET /api/videos/…` link. You see the JSON above.
+2. **API from the command line, as another website:**
+   ```powershell
+   curl.exe -i http://localhost:3000/api/videos/<id> -H "Origin: https://example.com"
+   ```
+   Look for `access-control-allow-origin: *` in the headers.
+3. **A pretend other website.** In a second terminal, from the repo root:
+   ```powershell
+   node --env-file=.env scripts/embed-test.mjs
+   ```
+   Open `http://localhost:5500/?id=<id>` (use an id from a watch page URL). This "travel blog" runs on a different
+   origin and shows:
+   - the **embedded player**: press ▶, switch quality, go full screen; **Spool ↗** opens the watch page in a new tab
+   - **✓ CORS works** with the API's JSON, fetched by that page's own JavaScript
+
+   Stop it with Ctrl+C.
+4. **Copy the embed code** on a watch page and paste it into any HTML file or online HTML playground. Same player.
+5. **Framing protection** (optional). In DevTools on the pretend blog, run
+   `document.body.innerHTML += '<iframe src="http://localhost:3000/login" width=600 height=300></iframe>'`.
+   The frame stays empty and the console says it refused because of `frame-ancestors`. Only `/embed` can be framed.
 
 ## Environment variables
 

@@ -39,6 +39,10 @@ export type PublicVideo = {
   /** The HLS master playlist, once ready. */
   hlsUrl: string | null;
   thumbnailUrl: string | null;
+  /** The Spool watch page for this video. */
+  watchUrl: string;
+  /** The chrome-less player page, for <iframe src="...">. */
+  embedUrl: string;
 };
 
 /** Statuses where the video won't change any more (no need to keep polling). */

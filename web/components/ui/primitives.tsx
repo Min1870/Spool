@@ -74,6 +74,19 @@ export function Field({
   );
 }
 
+/** Dark code block for snippets and URLs (the design's dark <pre>). */
+export function CodeBlock({ className, ...rest }: ComponentProps<"pre">) {
+  return (
+    <pre
+      {...rest}
+      className={cn(
+        "m-0 max-h-[340px] overflow-auto bg-neutral-900 p-4 font-mono text-[12px] leading-[1.6] whitespace-pre-wrap break-all text-neutral-100",
+        className,
+      )}
+    />
+  );
+}
+
 /** Segmented radio group (".seg"). Arrow-key navigation comes from the native radios. */
 export function Seg<T extends string>({
   name,

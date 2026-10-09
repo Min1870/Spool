@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { isFinalStatus, type PublicVideo } from "@shared/video";
-import { Button, Kicker, Skeleton } from "@/components/ui";
+import { Button, CodeBlock, Kicker, Skeleton } from "@/components/ui";
 import { formatDuration, formatWhen } from "@/lib/format";
 import { Player } from "./Player";
 import { StatusTag } from "./StatusTag";
@@ -22,9 +22,9 @@ const WAITING: Record<Exclude<PublicVideo["status"], "ready" | "failed">, { head
  * still being processed, asks GET /api/videos/[id] every 3 seconds until it's
  * ready (show the player) or failed (show the error).
  */
-export function WatchView({ initial, upNext }: { initial: PublicVideo; upNext: PublicVideo[] }) {
+export function WatchView({ initial, upNext, embedCode }: { initial: PublicVideo; upNext: PublicVideo[]; embedCode: string }) {
   const [video, setVideo] = useState(initial);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"link" | "embed" | null>(null);
 
   useEffect(() => {
     if (isFinalStatus(video.status)) return;
@@ -35,10 +35,10 @@ export function WatchView({ initial, upNext }: { initial: PublicVideo; upNext: P
     return () => clearInterval(timer);
   }, [video.id, video.status]);
 
-  async function copyLink() {
-    await navigator.clipboard.writeText(window.location.href).catch(() => undefined);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  async function copy(what: "link" | "embed") {
+    await navigator.clipboard.writeText(what === "link" ? video.watchUrl : embedCode).catch(() => undefined);
+    setCopied(what);
+    setTimeout(() => setCopied(null), 2000);
   }
 
   return (
@@ -60,13 +60,29 @@ export function WatchView({ initial, upNext }: { initial: PublicVideo; upNext: P
             </span>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Button variant="primary" onClick={() => void copyLink()}>
-              {copied ? "Copied ✓" : "Copy link"}
+            <Button variant="primary" onClick={() => void copy("link")}>
+              {copied === "link" ? "Copied ✓" : "Copy link"}
             </Button>
             <Button variant="secondary" href="/upload">
               Upload another
             </Button>
           </div>
+
+          {video.status === "ready" && (
+            <div className="mt-4 flex max-w-[640px] flex-col gap-3 border-t border-divider pt-6">
+              <h6 className="text-neutral-700">Embed on your site</h6>
+              <p className="text-[13px] text-neutral-700">Paste this HTML into any web page to show the player there.</p>
+              <CodeBlock>{embedCode}</CodeBlock>
+              <div className="flex flex-wrap items-center gap-4">
+                <Button variant="secondary" onClick={() => void copy("embed")}>
+                  {copied === "embed" ? "Copied ✓" : "Copy embed code"}
+                </Button>
+                <a href={`/api/videos/${video.id}`} className="font-mono text-[12px]" target="_blank" rel="noopener">
+                  GET /api/videos/{video.id.slice(0, 8)}… ↗
+                </a>
+              </div>
+            </div>
+          )}
         </section>
 
         <aside className="flex flex-col gap-3 border-divider py-6 md:border-l-2 md:pl-8">

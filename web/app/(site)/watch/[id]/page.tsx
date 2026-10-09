@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { WatchView } from "@/components/videos/WatchView";
-import { getPublicVideo, listPublicVideos } from "@/lib/server/videos";
+import { embedSnippet, getPublicVideo, listPublicVideos } from "@/lib/server/videos";
 
 export const dynamic = "force-dynamic";
 
@@ -23,5 +23,5 @@ export default async function WatchPage({ params }: Props) {
   const upNext = (await listPublicVideos({ onlyReady: true, limit: 5 })).filter((v) => v.id !== id).slice(0, 4);
 
   // key: remount when navigating between videos, so the player starts fresh.
-  return <WatchView key={video.id} initial={video} upNext={upNext} />;
+  return <WatchView key={video.id} initial={video} upNext={upNext} embedCode={embedSnippet(video)} />;
 }

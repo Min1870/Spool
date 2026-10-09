@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Archivo } from "next/font/google";
 import type { ReactNode } from "react";
-import { Shell } from "@/components/Shell";
 import "./globals.css";
 
 // next/font downloads Archivo at build time and serves it from our own site.
@@ -15,9 +14,8 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={archivo.variable}>
-      <body>
-        <Shell>{children}</Shell>
-      </body>
+      {/* The nav + footer come from app/(site)/layout.tsx, so /embed pages can go without them. */}
+      <body>{children}</body>
     </html>
   );
 }

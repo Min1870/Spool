@@ -3,7 +3,7 @@
 import { ArrowUp } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { signOut } from "@/app/login/actions";
+import { signOut } from "@/app/(site)/login/actions";
 import { Button } from "./ui";
 
 export function Nav({ signedIn, email }: { signedIn: boolean; email: string | null }) {
