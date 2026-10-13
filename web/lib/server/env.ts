@@ -27,6 +27,9 @@ const schema = z.object({
   SUPABASE_SECRET_KEY: z.string().startsWith("sb_secret_", "SUPABASE_SECRET_KEY should start with sb_secret_"),
 
   NEXT_PUBLIC_MAX_UPLOAD_MB: z.coerce.number().positive(),
+
+  // Optional: without it, linking uploads to TMDB movies is simply turned off.
+  TMDB_READ_ACCESS_TOKEN: z.string().optional().transform((v) => v?.trim() || undefined),
 });
 
 export type ServerEnv = z.infer<typeof schema>;

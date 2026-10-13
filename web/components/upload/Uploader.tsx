@@ -3,6 +3,7 @@
 import { Check } from "lucide-react";
 import { useState } from "react";
 import { Button, Field, Input, Rule } from "@/components/ui";
+import { TmdbPicker, type TmdbChoice } from "@/components/videos/TmdbPicker";
 import { formatBytes } from "@/lib/format";
 import { DropZone } from "./DropZone";
 import { MAX_UPLOAD_MB, useUploader, type UploadState } from "./useUploader";
@@ -10,24 +11,33 @@ import { MAX_UPLOAD_MB, useUploader, type UploadState } from "./useUploader";
 export function Uploader() {
   const { state, start, retry, cancel, reset } = useUploader();
   const [title, setTitle] = useState("");
+  const [tmdb, setTmdb] = useState<TmdbChoice | null>(null);
+  const editable = state.phase === "idle" || state.phase === "error";
   const maxLabel = MAX_UPLOAD_MB >= 1024 ? `${+(MAX_UPLOAD_MB / 1024).toFixed(1)} GB` : `${MAX_UPLOAD_MB} MB`;
 
   return (
     <div className="flex flex-col gap-6">
-      <Field label="Title" htmlFor="title" hint="Optional. If you leave it empty, the file name is used.">
+      <Field
+        label="Link to TMDB (optional)"
+        hint="Is this upload a movie? Link it, and client sites show it with TMDB's poster and details and play it instead of the trailer."
+      >
+        <TmdbPicker value={tmdb} onChange={setTmdb} disabled={!editable} />
+      </Field>
+
+      <Field label="Title" htmlFor="title" hint={tmdb ? "Optional. If you leave it empty, the TMDB title is used." : "Optional. If you leave it empty, the file name is used."}>
         <Input
           id="title"
           size="lg"
           maxLength={200}
           value={title}
-          disabled={state.phase !== "idle" && state.phase !== "error"}
+          disabled={!editable}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="My video"
+          placeholder={tmdb ? tmdb.title : "My video"}
         />
       </Field>
 
       {state.phase === "idle" ? (
-        <DropZone maxSizeLabel={maxLabel} onFile={(file) => void start(file, title)} />
+        <DropZone maxSizeLabel={maxLabel} onFile={(file) => void start(file, title.trim() || tmdb?.title || "", tmdb?.id ?? null)} />
       ) : (
         <StatusPanel
           state={state}
@@ -36,6 +46,7 @@ export function Uploader() {
           onReset={() => {
             reset();
             setTitle("");
+            setTmdb(null);
           }}
         />
       )}

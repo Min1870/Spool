@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { WatchView } from "@/components/videos/WatchView";
-import { embedSnippet, getPublicVideo, listPublicVideos } from "@/lib/server/videos";
+import { embedSnippet, getPublicVideo, getVideoOwnerId, listPublicVideos } from "@/lib/server/videos";
+import { currentUser } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -20,8 +21,11 @@ export default async function WatchPage({ params }: Props) {
   const video = await getPublicVideo(id);
   if (!video) notFound();
 
+  const [user, ownerId] = await Promise.all([currentUser(), getVideoOwnerId(id)]);
+  const isOwner = Boolean(user && ownerId === user.id);
+
   const upNext = (await listPublicVideos({ onlyReady: true, limit: 5 })).filter((v) => v.id !== id).slice(0, 4);
 
   // key: remount when navigating between videos, so the player starts fresh.
-  return <WatchView key={video.id} initial={video} upNext={upNext} embedCode={embedSnippet(video)} />;
+  return <WatchView key={video.id} initial={video} upNext={upNext} embedCode={embedSnippet(video)} isOwner={isOwner} />;
 }

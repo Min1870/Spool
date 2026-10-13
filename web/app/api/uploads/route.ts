@@ -5,6 +5,8 @@ import { env } from "@/lib/server/env";
 import { errorResponse, readJson, serverError } from "@/lib/server/http";
 import { requireUser } from "@/lib/server/require-user";
 import { supabaseAdmin } from "@/lib/server/supabase";
+import { TmdbError } from "@/lib/server/tmdb";
+import { tmdbLinkFields } from "@/lib/server/videos";
 
 // POST /api/uploads: step 1 of an upload.
 // The browser says "I want to upload this file". We check the type and size, create
@@ -16,6 +18,8 @@ const bodySchema = z.object({
   filename: z.string().min(1).max(255),
   size: z.number().int().positive("The file is empty."),
   contentType: z.string(),
+  // Optional: the TMDB movie this upload is (see "Link to TMDB" on the upload page).
+  tmdbId: z.number().int().positive().nullable().optional(),
 });
 
 export async function POST(request: Request) {
@@ -36,13 +40,24 @@ export async function POST(request: Request) {
     return errorResponse(413, `That file is too big. The limit is ${env().NEXT_PUBLIC_MAX_UPLOAD_MB} MB.`);
   }
 
+  // Look the TMDB movie up BEFORE creating anything, so a bad id fails cleanly.
+  let tmdbFields = {};
+  if (data.tmdbId) {
+    try {
+      tmdbFields = await tmdbLinkFields(data.tmdbId);
+    } catch (err) {
+      if (err instanceof TmdbError) return errorResponse(err.status, err.message);
+      return serverError("tmdb lookup", err);
+    }
+  }
+
   try {
     const db = supabaseAdmin();
 
     // 1. Insert the row. Postgres generates the id, and we read it back.
     const { data: row, error } = await db
       .from("videos")
-      .insert({ title: data.title, status: "uploading", user_id: auth.user.id })
+      .insert({ title: data.title, status: "uploading", user_id: auth.user.id, ...tmdbFields })
       .select("id")
       .single();
     if (error) return serverError("insert video", error);

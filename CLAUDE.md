@@ -39,8 +39,14 @@ a public API.
 1. API creates a `videos` row (status `uploading`) and returns presigned multipart URLs.
 2. Browser uploads directly to the **private** bucket (`S3_BUCKET`) at `originals/{videoId}/`.
 3. On completion, API sets status `queued` and adds a BullMQ job.
-4. Worker downloads the original, runs FFmpeg to HLS (480p + 720p, 6-second segments,
-   `master.m3u8`, `-crf 23`) and extracts a thumbnail.
+4. Worker downloads the original, runs FFmpeg to HLS (6-second segments, `master.m3u8`) and
+   extracts a thumbnail. **"Option C"** (`worker/src/hls.ts`, `planHls`):
+   - **Copy** the original video into HLS (no re-encode, minutes even for a movie) when it's
+     browser-friendly: H.264, 8-bit 4:2:0, not rotated, short side ≤ 1080, ≤ 12 Mbit/s. Non-AAC
+     audio is converted to AAC. Add one **480p** encode (CRF 23, max 1.4 Mbit/s, keyframes
+     matching the original) when the original is > 540p AND > 2 Mbit/s.
+   - Otherwise **encode** 480p + 720p (CRF 23, capped bitrates, keyframes every 6 s).
+   - Sizes always mean the SHORT side, so portrait videos work.
 5. Worker uploads results to the **public** bucket (`S3_PUBLIC_BUCKET`) at `hls/{videoId}/`,
    sets status `ready` (or `failed` with an error message).
 6. Watch page plays `${S3_PUBLIC_URL}/hls/{videoId}/master.m3u8` with hls.js.
@@ -131,11 +137,18 @@ rules: `docs/design/modernist.css`. Follow the visual design there. Behaviour fo
 
 ## Client site (MSW)
 
-`D:\Work Folder\MSW` is a separate Next.js site (its own repo and CLAUDE.md) that shows Spool
-videos alongside a TMDB catalogue. It talks to Spool **only** through the public API
+`D:\Work Folder\MSW` is a separate Next.js site (its own repo and CLAUDE.md) that shows ONLY
+what's uploaded to Spool: TMDB-linked uploads are its movie catalogue (with TMDB details), unlinked
+uploads are "creator videos". It talks to Spool **only** through the public API
 (`GET /api/videos`, `GET /api/videos/[id]`, both with CORS), from the browser, with no keys.
 Keep those two responses backwards compatible (`PublicVideo` in `web/shared/video.ts`), or
 update MSW's `src/lib/spool.ts` at the same time. Spool runs on port 3000, MSW on 3001.
+
+**TMDB movies:** an upload can be linked to a TMDB movie (`videos.tmdb_type/tmdb_id`, migration
+0003). MSW then plays the upload as the full movie on that TMDB title's watch page (lookup:
+`GET /api/videos?tmdb=movie:<id>`), and lists linked uploads in "Now Streaming". TMDB calls in
+Spool happen server-side only (`web/lib/server/tmdb.ts`, `TMDB_READ_ACCESS_TOKEN`). Movies only
+for now; TV episodes are a possible next step.
 
 ## Out of scope for now
 

@@ -296,6 +296,15 @@ Open http://localhost:3000. You should see the Spool landing page. Click **Uploa
 
 ## Phase 4: the transcoding worker
 
+> **Update ("Option C"):** the worker no longer always re-encodes. If the upload is already
+> browser-friendly (H.264, 8-bit, upright, ≤ 1080p, ≤ 12 Mbit/s), it **copies** the video into HLS
+> as-is: no quality loss, about 3× faster overall, minutes instead of hours for a movie. It adds a
+> small **480p** version for slow connections when the original is big and heavy enough to need one.
+> Anything else (H.265, 10-bit/HDR, rotated phone videos, 4K, huge bitrates) is encoded to
+> 480p + 720p as described below. The worker log shows the decision, e.g.
+> `Plan: copy 1080p + encode 480p, audio copy`. The output folders are named after the
+> renditions (`1080p/`, `480p/`, …), and the old output is removed when a video is re-processed.
+
 `worker/` is a separate Node.js + TypeScript program that runs in Docker next to Garage and
 Redis. It takes jobs from the queue and turns each original into adaptive HLS.
 
@@ -583,6 +592,58 @@ cd web; npm run dev
 cd "D:\Work Folder\MSW"; npm run dev
 ```
 Open http://localhost:3001. See MSW's README for its `NEXT_PUBLIC_SPOOL_API_URL` setting.
+
+## Movies: link uploads to TMDB
+
+Upload the **actual movie file** in Spool and link it to its entry on
+[TMDB](https://www.themoviedb.org) (the movie database MSW already uses). Then, in MSW:
+
+- the movie's **Play** button (now labelled **Play Movie**) streams *your* file instead of the YouTube trailer
+  (the player says **FULL MOVIE · SPOOL HD**). **Trailer** still plays the trailer;
+- a **Now Streaming** row on MSW's home page lists every movie you've uploaded, with TMDB posters;
+- title, poster, overview and cast still come from TMDB. Spool only provides the video.
+
+```
+Spool admin                                 MSW
+upload "notld.mp4" + link → TMDB 10331  ──▶  /movie/10331 "Night of the Living Dead"
+videos.tmdb_type = movie                      Play Movie → GET /api/videos?tmdb=movie:10331
+videos.tmdb_id   = 10331                                  → plays your HLS stream
+```
+
+Only upload films you have the rights to stream. For testing, public-domain films that are on TMDB work well,
+for example *Night of the Living Dead* (1968, TMDB id 10331) or *Nosferatu* (1922).
+
+**What's new in Spool:**
+- Migration [supabase/migrations/0003_tmdb_link.sql](supabase/migrations/0003_tmdb_link.sql): `tmdb_type`, `tmdb_id`
+  and a small copy of the TMDB title/year/poster on each video.
+- **Link to TMDB** box on the upload page (optional), and a **TMDB** box on each watch page where the uploader can
+  link, change or remove it later. **My videos** cards show `TMDB · Title (year)`.
+- `GET /api/tmdb/search?q=…` (signed-in only): TMDB search, done on the server so the TMDB token stays secret.
+- `PUT /api/videos/<id>/tmdb` `{ "tmdbId": 10331 }` (owner only; `null` removes the link). The title/year/poster are
+  fetched from TMDB on the server, never taken from the browser.
+- The public API includes `"tmdb": { "type", "id", "title", "year", "posterUrl" }`, and the list accepts
+  `?tmdb=movie:10331` and `?linked=true|false`.
+
+### Set it up
+
+1. **Run the migration:** Supabase → SQL Editor → paste [supabase/migrations/0003_tmdb_link.sql](supabase/migrations/0003_tmdb_link.sql) → Run.
+2. **TMDB token** in the repo-root `.env`: `TMDB_READ_ACCESS_TOKEN=…` (themoviedb.org → Settings → API →
+   "API Read Access Token"). Restart `npm run dev` after changing `.env`.
+
+### Test it
+
+With Docker, Spool (`cd web`, `npm run dev`, port 3000) and MSW (`npm run dev` in `D:\Work Folder\MSW`, port 3001) running:
+
+1. **Link while uploading.** Spool → **Upload**. In **Link to TMDB**, type `night of the living dead` and pick the
+   1968 film. Leave the title empty (it uses the TMDB title), drop the movie file, wait for **Uploaded**.
+2. **Or link later.** Open any of your videos in Spool. In the **TMDB** box, search and pick a movie. "Saved ✓".
+3. **My videos** shows `TMDB · Night of the Living Dead (1968)` on the card.
+4. **MSW home** (http://localhost:3001): a **Now Streaming** row with the TMDB poster. (The list can take up to a minute
+   to refresh.)
+5. Open the movie. The button says **Play Movie**. Press it: the player shows **FULL MOVIE · SPOOL HD** and plays your
+   upload. **Trailer** still opens the YouTube trailer. Movies you haven't uploaded behave exactly as before.
+6. **Unlink** in Spool (**Remove** in the TMDB box). After a minute, MSW plays the trailer again, and the video goes
+   back to **Fresh from Creators**.
 
 ## Environment variables
 

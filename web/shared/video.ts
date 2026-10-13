@@ -21,7 +21,39 @@ export type Video = {
   error: string | null;
   /** ISO timestamp. */
   created_at: string;
+  /** TMDB link (migration 0003). All null when the video isn't linked. */
+  tmdb_type: TmdbType | null;
+  tmdb_id: number | null;
+  tmdb_title: string | null;
+  tmdb_year: number | null;
+  tmdb_poster_path: string | null;
 };
+
+export type TmdbType = "movie" | "tv";
+
+/** A video's link to a TMDB entry, as the public API shows it. */
+export type TmdbLink = {
+  type: TmdbType;
+  id: number;
+  title: string | null;
+  year: number | null;
+  /** Full poster image URL on TMDB's image CDN, if TMDB has one. */
+  posterUrl: string | null;
+};
+
+/** A TMDB movie, as our TMDB search API returns it. */
+export type TmdbMovie = {
+  id: number;
+  title: string;
+  year: number | null;
+  posterPath: string | null;
+  overview: string;
+};
+
+/** TMDB poster URL from a poster path like "/abc.jpg". */
+export function tmdbPosterUrl(path: string | null, size: "w92" | "w185" | "w342" = "w185"): string | null {
+  return path ? `https://image.tmdb.org/t/p/${size}${path}` : null;
+}
 
 /**
  * A video as the browser sees it (pages and GET /api/videos/[id]). Storage keys are
@@ -43,6 +75,8 @@ export type PublicVideo = {
   watchUrl: string;
   /** The chrome-less player page, for <iframe src="...">. */
   embedUrl: string;
+  /** The TMDB movie this video is, if linked. Client sites use it for title/poster/overview. */
+  tmdb: TmdbLink | null;
 };
 
 /** Statuses where the video won't change any more (no need to keep polling). */

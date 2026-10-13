@@ -3,7 +3,7 @@ import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectsCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { env } from "./env";
 import { cacheControlFor, contentTypeFor } from "./hls";
 
@@ -70,4 +70,24 @@ export async function uploadFolder(localDir: string, keyPrefix: string, lastFile
   }
   if (files.includes(lastFile)) await uploadFile(path.join(localDir, lastFile), keyPrefix + lastFile);
   return files.length;
+}
+
+/**
+ * Delete everything under `keyPrefix` in the public bucket. Used before uploading a new
+ * result, so a re-processed video doesn't keep stale files from an earlier run (e.g. an
+ * old 720p/ folder when the new run produces 1080p/ + 480p/ instead).
+ */
+export async function clearPublicFolder(keyPrefix: string): Promise<number> {
+  let deleted = 0;
+  let token: string | undefined;
+  do {
+    const page = await s3.send(new ListObjectsV2Command({ Bucket: env.S3_PUBLIC_BUCKET, Prefix: keyPrefix, ContinuationToken: token }));
+    const keys = (page.Contents ?? []).flatMap((o) => (o.Key ? [{ Key: o.Key }] : []));
+    if (keys.length) {
+      await s3.send(new DeleteObjectsCommand({ Bucket: env.S3_PUBLIC_BUCKET, Delete: { Objects: keys } }));
+      deleted += keys.length;
+    }
+    token = page.NextContinuationToken;
+  } while (token);
+  return deleted;
 }

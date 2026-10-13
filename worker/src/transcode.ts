@@ -5,8 +5,8 @@ import { UnrecoverableError } from "bullmq";
 import { hlsFolder, hlsMasterKey, thumbnailKey } from "../../web/shared/video";
 import { getVideo, markProcessing, markReady } from "./db";
 import { ffmpeg, probe } from "./ffmpeg";
-import { buildHlsArgs, buildThumbnailArgs, thumbnailSeconds } from "./hls";
-import { downloadOriginal, uploadFolder } from "./storage";
+import { buildHlsArgs, buildThumbnailArgs, describePlan, planHls, thumbnailSeconds } from "./hls";
+import { clearPublicFolder, downloadOriginal, uploadFolder } from "./storage";
 
 /**
  * Process one video: download → FFmpeg → upload → mark ready.
@@ -38,15 +38,25 @@ export async function transcodeVideo(videoId: string, log: (msg: string) => void
     await downloadOriginal(video.original_key, input);
 
     const info = await probe(input);
-    log(`Duration ${info.duration.toFixed(1)}s, audio: ${info.hasAudio ? "yes" : "no"}`);
+    const v = info.video;
+    log(
+      `Duration ${info.duration.toFixed(1)}s, video ${v.codec} ${v.width}x${v.height} ${v.pixFmt}` +
+        `${v.rotation ? ` rotated ${v.rotation}°` : ""}${v.bitRateKbps ? ` ${v.bitRateKbps} kbit/s` : ""}, ` +
+        `audio ${info.audio?.codec ?? "none"}`,
+    );
 
-    log("Transcoding to HLS (480p + 720p)…");
+    // Copy the original when it's already browser-friendly (minutes), otherwise re-encode (hours for a movie).
+    const plan = planHls(info);
+    log(`Plan: ${describePlan(plan)}`);
     const started = Date.now();
-    await ffmpeg(buildHlsArgs(input, outDir, info));
-    log(`Transcoded in ${((Date.now() - started) / 1000).toFixed(1)}s`);
+    await ffmpeg(buildHlsArgs(input, outDir, plan));
+    log(`HLS ready in ${((Date.now() - started) / 1000).toFixed(1)}s`);
 
     await ffmpeg(buildThumbnailArgs(input, path.join(outDir, "thumbnail.jpg"), thumbnailSeconds(info.duration)));
 
+    // Remove any output from an earlier run of this video first (retries, re-processing).
+    const stale = await clearPublicFolder(hlsFolder(videoId));
+    if (stale) log(`Removed ${stale} old files from ${hlsFolder(videoId)}`);
     const count = await uploadFolder(outDir, hlsFolder(videoId));
     log(`Uploaded ${count} files to ${hlsFolder(videoId)}`);
 

@@ -15,7 +15,13 @@ export function VideoCard({ video }: { video: PublicVideo }) {
       <h3 className="line-clamp-2 text-[17px] leading-[1.2] font-extrabold">{video.title}</h3>
       <div className="flex items-center gap-2 text-[13px] text-neutral-700 group-hover:text-accent">
         {video.status !== "ready" && <StatusTag status={video.status} />}
-        <span>{formatWhen(video.createdAt)}</span>
+        {video.tmdb && (
+          <span className="truncate font-semibold" title={`Linked to TMDB: ${video.tmdb.title}`}>
+            TMDB · {video.tmdb.title}
+            {video.tmdb.year ? ` (${video.tmdb.year})` : ""}
+          </span>
+        )}
+        <span className="whitespace-nowrap">{formatWhen(video.createdAt)}</span>
       </div>
     </Link>
   );

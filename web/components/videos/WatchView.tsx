@@ -7,6 +7,7 @@ import { Button, CodeBlock, Kicker, Skeleton } from "@/components/ui";
 import { formatDuration, formatWhen } from "@/lib/format";
 import { Player } from "./Player";
 import { StatusTag } from "./StatusTag";
+import { TmdbLinkEditor } from "./TmdbLinkEditor";
 import { Thumbnail } from "./Thumbnail";
 
 const POLL_MS = 3000;
@@ -22,7 +23,18 @@ const WAITING: Record<Exclude<PublicVideo["status"], "ready" | "failed">, { head
  * still being processed, asks GET /api/videos/[id] every 3 seconds until it's
  * ready (show the player) or failed (show the error).
  */
-export function WatchView({ initial, upNext, embedCode }: { initial: PublicVideo; upNext: PublicVideo[]; embedCode: string }) {
+export function WatchView({
+  initial,
+  upNext,
+  embedCode,
+  isOwner,
+}: {
+  initial: PublicVideo;
+  upNext: PublicVideo[];
+  embedCode: string;
+  /** The signed-in user uploaded this video (may edit its TMDB link). */
+  isOwner: boolean;
+}) {
   const [video, setVideo] = useState(initial);
   const [copied, setCopied] = useState<"link" | "embed" | null>(null);
 
@@ -67,6 +79,8 @@ export function WatchView({ initial, upNext, embedCode }: { initial: PublicVideo
               Upload another
             </Button>
           </div>
+
+          <TmdbLinkEditor videoId={video.id} initial={video.tmdb} canEdit={isOwner} />
 
           {video.status === "ready" && (
             <div className="mt-4 flex max-w-[640px] flex-col gap-3 border-t border-divider pt-6">

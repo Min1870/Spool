@@ -125,8 +125,8 @@ export function useUploader() {
     }
   }
 
-  /** Steps 1 + 2: start uploading a file. */
-  async function start(file: File, title: string) {
+  /** Steps 1 + 2: start uploading a file (optionally linked to a TMDB movie). */
+  async function start(file: File, title: string, tmdbId: number | null = null) {
     fileRef.current = file;
     videoIdRef.current = null;
 
@@ -147,6 +147,7 @@ export function useUploader() {
         filename: file.name,
         size: file.size,
         contentType: file.type,
+        tmdbId,
       });
       videoIdRef.current = videoId;
 
