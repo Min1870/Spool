@@ -133,7 +133,17 @@ rules: `docs/design/modernist.css`. Follow the visual design there. Behaviour fo
 5. Video list page + watch page with hls.js and status display
 6. Supabase Auth: only logged-in users can upload
 7. Public API (`GET /api/videos/[id]`) with CORS + `/embed/[id]` iframe page
-8. Deploy notes: VPS (e.g. DigitalOcean Droplet) + Cloudflare R2
+8. Deploy, free version (`docs/deploy-free.md`): Vercel (Spool + MSW) + Cloudflare R2 + Redis Cloud +
+   Supabase, worker in Docker on the developer's PC. Later: the same worker on a VPS (e.g. a Droplet)
+
+## Production
+
+- `.env.production` (gitignored; template `.env.production.example`) holds the production values. The web
+  vars go into Vercel's settings, and the worker reads the file via `docker-compose.prod.yml` (worker only, no
+  address overrides).
+- The R2 CORS rules live in `deploy/*.json` (pasted into the dashboard). Keep them in sync with
+  `garage/init.mjs`.
+- Production Supabase = the same project as local dev, with sign-ups turned off.
 
 ## Client site (MSW)
 

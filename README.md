@@ -641,11 +641,37 @@ With Docker, Spool (`cd web`, `npm run dev`, port 3000) and MSW (`npm run dev` i
 4. **MSW home** (http://localhost:3001): a **Now Streaming** row with the TMDB poster. (The list can take up to a minute
    to refresh.)
 5. Open the movie. The button says **Play Movie**. Press it: the player shows **FULL MOVIE · SPOOL HD** and plays your
-   upload. **Trailer** still opens the YouTube trailer. Movies you haven't uploaded behave exactly as before.
-6. **Unlink** in Spool (**Remove** in the TMDB box). After a minute, MSW plays the trailer again, and the video goes
-   back to **Fresh from Creators**.
+   upload. **Trailer** still opens the YouTube trailer. Movies you haven't uploaded aren't on MSW at all.
+6. **Unlink** in Spool (**Remove** in the TMDB box). After a minute, the movie leaves MSW's catalogue and the
+   video goes back to **Fresh from Creators**.
+
+## Phase 8: free deploy (Vercel + R2 + Redis Cloud + worker at home)
+
+Step-by-step guide: **[docs/deploy-free.md](docs/deploy-free.md)**.
+
+| Part | Where | Cost |
+|---|---|---|
+| Spool web + API, MSW | Vercel Hobby, built from GitHub | free |
+| Files | Cloudflare R2 (`spool-originals` private, `spool-media` public via r2.dev) | free ≤ 10 GB |
+| Database + login | Supabase (same project as local) | free |
+| Job queue | Redis Cloud free database | free |
+| Worker (FFmpeg) | Docker on your PC: [docker-compose.prod.yml](docker-compose.prod.yml) | free |
+
+What this phase added:
+- [.env.production.example](.env.production.example): every production variable, marked `[web]`, `[worker]` or `[both]`.
+  Copy it to `.env.production` (gitignored), fill it in, and paste it into Vercel.
+- [docker-compose.prod.yml](docker-compose.prod.yml): just the worker, talking to R2 and Redis Cloud over the
+  internet (outgoing connections only, so no ports to open).
+- [deploy/](deploy/): the R2 CORS rules to paste into the Cloudflare dashboard (the R2 version of what
+  `garage/init.mjs` does locally).
+
+No app code changed: going from Garage to R2 is only env vars, as planned in phase 1.
+
+**Later:** to run the worker without your PC, rent a VPS (e.g. a DigitalOcean Droplet, 2 vCPU / 4 GB, about $24 a month)
+and run the same `docker compose -f docker-compose.prod.yml up -d --build` there.
 
 ## Environment variables
 
-Every variable is documented in [.env.example](.env.example). Switching from Garage to
-Cloudflare R2 only means changing the **Storage** block (covered in the deploy phase).
+Every variable is documented in [.env.example](.env.example) (local) and
+[.env.production.example](.env.production.example) (production). Switching from Garage to
+Cloudflare R2 only means changing the **Storage** block.

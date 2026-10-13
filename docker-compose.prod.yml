@@ -1,0 +1,30 @@
+# Production worker for the FREE deploy (see docs/deploy-free.md).
+#
+#   docker compose -f docker-compose.prod.yml up -d --build   start (or rebuild) the worker
+#   docker compose -f docker-compose.prod.yml logs -f worker  watch it work
+#   docker compose -f docker-compose.prod.yml down            stop it
+#
+# In production the website runs on Vercel, files live in Cloudflare R2 and the job
+# queue in Redis Cloud. The only thing left to run is this worker, which needs a real
+# computer with FFmpeg: your PC (or later a VPS).
+#
+# Unlike docker-compose.yml there is no Garage and no Redis here, and no address
+# overrides: the worker reaches R2 and Redis Cloud over the internet, using the
+# addresses in .env.production. It only makes OUTGOING connections, so nothing has to
+# be opened in your router or firewall.
+
+# A different project name from the dev stack ("spool"), so the two never touch
+# each other's containers.
+name: spool-prod
+
+services:
+  worker:
+    build:
+      context: . # repo root, so the image can include web/shared (see worker/Dockerfile)
+      dockerfile: worker/Dockerfile
+    # Production values (R2 keys, Redis Cloud URL, Supabase keys). Never committed.
+    env_file: .env.production
+    # On stop, give an in-progress job up to 60s to finish (a killed job is retried).
+    stop_grace_period: 60s
+    # Start again automatically if it crashes, or when Docker Desktop starts.
+    restart: unless-stopped
